@@ -5,6 +5,7 @@ import { ClipLoader } from "react-spinners";
 interface SearchResult {
   path: string[];
   time: number;
+  message?: string;
 }
 
 function SearchComponent() {
@@ -31,7 +32,11 @@ function SearchComponent() {
         },
       });
       const data = await response.json();
-  
+      if (data.message) {
+        alert("Not valid wikipedia article");
+        setLoading(false);
+        return;
+      }
       setResults(data);
       setLoading(false)
     } catch (error) {
