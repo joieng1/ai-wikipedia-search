@@ -1,16 +1,15 @@
 "use client";
 import React, { useState, CSSProperties } from "react";
-import { CircleLoader, ClipLoader } from "react-spinners";
+import { ClipLoader } from "react-spinners";
 
 interface SearchResult {
   path: string[];
-  distance: number;
   time: number;
 }
 
 function SearchComponent() {
-  const [start, setStart] = useState("Chemical Engineer");
-  const [end, setEnd] = useState("George E. Davis");
+  const [start, setStart] = useState("Video Games");
+  const [end, setEnd] = useState("Minecraft");
   const [results, setResults] = useState<SearchResult | null>(null);
   let [loading, setLoading] = useState(false);
 
@@ -24,20 +23,27 @@ function SearchComponent() {
     e.preventDefault();
     setLoading(true)
     setResults(null);
-    const response = await fetch("", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    const data = await response.json();
-    setResults(data);
-    setLoading(false)
+    try {
+      const response = await fetch(`/api/wikipedia?startWord=${start}&endWord=${end}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const data = await response.json();
+  
+      setResults(data);
+      setLoading(false)
+    } catch (error) {
+      alert("Not valid wikipedia article");
+      setLoading(false);
+      return;
+    }
   }
 
   return (
-    <div className="container m-5 text-2xl border-black border-2 p-2">
-      <h1 className="text-center">WikiGame Path Generator</h1>
+    <div className="container mx-auto mt-5 text-2xl border-black border-2 p-2">
+      <h1 className="text-center font-lg">WikiGame Path Generator</h1>
       <form className="flex flex-col" onSubmit={(e)=>handleSubmit(e)}>
         <input
           value={start}
@@ -56,7 +62,7 @@ function SearchComponent() {
       {results && (
         <div className="mt-5 text-lg">
           <p>Path: {results.path.join(" -> ")}</p>
-          <p>Distance: {results.distance}</p>
+          <p>Distance: {results.path.length} clicks</p>
           <p>Time: {results.time}</p>
         </div>
       )}
