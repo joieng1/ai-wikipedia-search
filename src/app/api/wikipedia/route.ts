@@ -184,9 +184,7 @@ export async function GET(req: NextRequest) {
     const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
     if (!link1.ok || !link2.ok) {
-      return new NextResponse({
-        status: 404,
-      });
+      return NextResponse.json({ message: "Error", status: 404 });
     }
 
     const result = await greedyBFS(startWord, endWord);
