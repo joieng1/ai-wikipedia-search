@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
 import * as cheerio from "cheerio";
+export const maxDuration = 60
 
 const extractor = await pipeline(
   "feature-extraction",
   "Xenova/all-MiniLM-L6-v2"
 );
 
-export const config = {
-  maxDuration: 60,
-};
 interface wikipediaRes {
   batchcomplete: string;
   query: {
