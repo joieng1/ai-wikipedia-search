@@ -8,6 +8,9 @@ const extractor = await pipeline(
   "Xenova/all-MiniLM-L6-v2"
 );
 
+export const config = {
+  maxDuration: 60,
+};
 interface wikipediaRes {
   batchcomplete: string;
   query: {
@@ -111,6 +114,7 @@ async function getLinksFromHTML(title: string) {
 
       if (!reachedReferences) {
         let href = $(element).attr("href");
+        console.log("Href ", href);
         if (
           href &&
           !href.startsWith("/wiki/File:") &&
