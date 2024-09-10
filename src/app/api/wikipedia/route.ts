@@ -71,7 +71,7 @@ async function getLinksFromHTML(title: string) {
 
     //use cheerio to parse html and collect links up until references
     const $ = cheerio.load(htmlContent);
-    const wikiLinks: string[] = [];
+    const wikiLinks: { href: string; text: string }[] = [];
     let reachedReferences = false;
 
     $("*").each((index, element) => {
@@ -86,6 +86,7 @@ async function getLinksFromHTML(title: string) {
 
       if (!reachedReferences) {
         let href = $(element).attr("href");
+        const text = $(element).text();
         if (
           href &&
           !href.startsWith("/wiki/File:") &&
@@ -96,8 +97,11 @@ async function getLinksFromHTML(title: string) {
           !href.startsWith("/wiki/Help:") && 
           href.startsWith("/wiki")
         ) {
-          href = decodeURIComponent(href);
-          wikiLinks.push(href.replace(/_/g, " ").substring(6));
+          // store href and the inner text of the <a> tag
+          wikiLinks.push({
+            href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // Cleaning up href
+            text: text.trim() // The text between <a> and </a>
+          });
         }
       }
     });
@@ -112,10 +116,13 @@ async function getLinksFromHTML(title: string) {
 async function greedyBFS(
   startWord: string,
   endWord: string
-): Promise<string[]> {
+): Promise<{ href: string, text: string }[]> {
   const visited = new Set<string>();
-  const priorityQueue = new PriorityQueue<{ word: string; path: string[] }>();
-  priorityQueue.enqueue({ word: startWord, path: [startWord] }, 0);
+  const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string }[] }>();
+  priorityQueue.enqueue(
+    { word: startWord, path: [{ href: startWord, text: startWord }] },
+    0
+  );
 
   while (!priorityQueue.isEmpty()) {
     const { word: currentWord, path: currentPath } = priorityQueue.dequeue()!;
@@ -129,12 +136,13 @@ async function greedyBFS(
     const links = await getLinksFromHTML(currentWord);
 
     if (links !== null) {
-      for (const link of links) {
-        if (visited.has(link)) continue;
-        const similarity = await compareTwoWords(link, endWord);
+      for (const linkObj of links) {
+        const { href, text } = linkObj;
+        if (visited.has(href)) continue;
+        const similarity = await compareTwoWords(href, endWord);
 
-        const newPath = [...currentPath, link];
-        priorityQueue.enqueue({ word: link, path: newPath }, similarity);
+        const newPath = [...currentPath, {href,text}];
+        priorityQueue.enqueue({ word: href, path: newPath }, similarity);
       }
     }
   }
