@@ -53,32 +53,6 @@ async function compareTwoWords(word1: string, word2: string) {
   return cosineSimilarity(vec1, vec2);
 }
 
-// async function getLinks(title: string) {
-//   try {
-//     const getResponse = await fetch(
-//       `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
-//         title
-//       )}&prop=links&pllimit=max&format=json`
-//     );
-//     const data: wikipediaRes = await getResponse.json();
-
-//     const pageId: string = Object.keys(data.query.pages)[0];
-//     const page = data.query.pages[pageId];
-//     if (pageId === "-1" || page.missing !== undefined) {
-//       console.warn(`Page "${title}" is missing or does not exist.`);
-//       return [];
-//     }
-//     const links = page.links;
-//     const filteredLinks = links
-//       .filter((link) => link.ns === 0)
-//       .map((link) => link.title);
-
-//     return filteredLinks;
-//   } catch (error: any) {
-//     throw error;
-//   }
-// }
-
 async function getLinksFromHTML(title: string) {
   try {
     // Extract the HTML content from wikipedia
@@ -102,22 +76,24 @@ async function getLinksFromHTML(title: string) {
 
     $("*").each((index, element) => {
       if (
-        $(element).is("span") &&
-        $(element).attr("id") == "References" &&
-        $(element).hasClass("mw-headline")
+        $(element).is("h2") &&
+        $(element).attr("id") == "References" 
       ) {
         reachedReferences = true;
+        console.log("REACHED")
         return false;
       }
 
       if (!reachedReferences) {
         let href = $(element).attr("href");
-        console.log("Href ", href);
         if (
           href &&
           !href.startsWith("/wiki/File:") &&
           !href.startsWith("/wiki/Portal:") &&
           !href.startsWith("/wiki/Category:") &&
+          !href.startsWith("/wiki/Wikipedia:") && 
+          !href.startsWith("/wiki/Special:") && 
+          !href.startsWith("/wiki/Help:") && 
           href.startsWith("/wiki")
         ) {
           href = decodeURIComponent(href);
