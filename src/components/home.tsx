@@ -3,14 +3,14 @@ import React, { useState, CSSProperties } from "react";
 import { ClipLoader } from "react-spinners";
 
 interface SearchResult {
-  path: string[];
+  path: { href: string; text: string }[];
   time: number;
   message?: string;
 }
 
 function SearchComponent() {
   const [start, setStart] = useState("Video Games");
-  const [end, setEnd] = useState("Minecraft");
+  const [end, setEnd] = useState("Chemical engineer");
   const [results, setResults] = useState<SearchResult | null>(null);
   let [loading, setLoading] = useState(false);
 
@@ -37,6 +37,7 @@ function SearchComponent() {
         setLoading(false);
         return;
       }
+      console.log(data)
       setResults(data);
       setLoading(false)
     } catch (error) {
@@ -66,9 +67,25 @@ function SearchComponent() {
       </form>
       {results && (
         <div className="mt-5 text-lg">
-          <p>Path: {results.path.join(" -> ")}</p>
+          <p>Path:</p>
+          <ul>
+            {results.path.map((step, index) => (
+              <li key={index} className="inline">
+                <a
+                  href={`https://en.wikipedia.org/wiki/${encodeURIComponent(step.href)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 underline"
+                >
+                  {step.text || step.href}
+                </a>
+                {/* Every element except the last element will render "->" */}
+                {index < results.path.length - 1 && " -> "} 
+              </li>
+            ))}
+          </ul>
           <p>Distance: {results.path.length} clicks</p>
-          <p>Time: {results.time}</p>
+          <p>Time: {results.time} seconds</p>
         </div>
       )}
       {loading && (
