@@ -80,7 +80,6 @@ async function getLinksFromHTML(title: string) {
         $(element).attr("id") == "References" 
       ) {
         reachedReferences = true;
-        console.log("REACHED")
         return false;
       }
 
