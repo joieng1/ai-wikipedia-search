@@ -136,7 +136,6 @@ function SearchComponent() {
           <p>Path Length: {results.length}</p>
           <p>Time taken: {timeElapsed}s</p>
         </div>
-        805-316-8578
       )}
       {loading && (
         <ClipLoader
