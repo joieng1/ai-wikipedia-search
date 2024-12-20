@@ -8,6 +8,7 @@ const extractor = await pipeline(
   "feature-extraction",
   "Xenova/all-MiniLM-L6-v2"
 );
+const embeddingCache = new Map();
 
 interface wikipediaRes {
   batchcomplete: string;
@@ -31,6 +32,33 @@ interface wikipediaRes {
   };
 }
 
+// cachces all embeddings and returns the cachced result
+async function getEmbedding(word : string) {
+  if (embeddingCache.has(word)) {
+    return embeddingCache.get(word);
+  }
+  const output = await extractor(word, { pooling: "mean", normalize: true });
+  const vector = Array.from(output.data);
+  embeddingCache.set(word, vector);
+  return vector;
+}
+
+// convert an async iterator to a readable stream
+function iteratorToStream(iterator: any) {
+  return new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await iterator.next();
+
+      if (done) {
+        controller.close();
+      } else {
+        controller.enqueue(value);
+      }
+    },
+  });
+}
+
+// calculate the cosine similarity between two vectors
 function cosineSimilarity(vec1: number[], vec2: number[]) {
   const dotProduct = vec1.reduce(
     (sum: any, val: any, i: any) => sum + val * vec2[i],
@@ -45,17 +73,17 @@ function cosineSimilarity(vec1: number[], vec2: number[]) {
   return dotProduct / (magnitude1 * magnitude2);
 }
 
+// compares 2 words using the feature extraction pipeline and cosine similarity
 async function compareTwoWords(word1: string, word2: string) {
-  const output1 = await extractor(word1, { pooling: "mean", normalize: true });
-  const output2 = await extractor(word2, { pooling: "mean", normalize: true });
-  const vec1 = Array.from(output1.data);
-  const vec2 = Array.from(output2.data);
+  const vec1 = await getEmbedding(word1);
+  const vec2 = await getEmbedding(word2);
   return cosineSimilarity(vec1, vec2);
 }
 
+// extract links from the HTML content of a Wikipedia page
 async function getLinksFromHTML(title: string) {
   try {
-    // Extract the HTML content from wikipedia
+    // extract the HTML content from wikipedia
     const response = await fetch(
       `https://en.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(
         title
@@ -94,12 +122,13 @@ async function getLinksFromHTML(title: string) {
           !href.startsWith("/wiki/Wikipedia:") && 
           !href.startsWith("/wiki/Special:") && 
           !href.startsWith("/wiki/Help:") && 
+          !href.startsWith("/wiki/Template:") && 
           href.startsWith("/wiki")
         ) {
           // store href and the inner text of the <a> tag
           wikiLinks.push({
             href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // Cleaning up href
-            text: text.trim() // The text between <a> and </a>
+            text: text.trim() // removestext between <a> and </a>
           });
         }
       }
@@ -112,10 +141,8 @@ async function getLinksFromHTML(title: string) {
   }
 }
 
-async function greedyBFS(
-  startWord: string,
-  endWord: string
-): Promise<{ href: string, text: string }[]> {
+// async generator function to find the path between two words
+async function* pathFinderIterator(startWord : string, endWord : string) {
   const visited = new Set<string>();
   const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string }[] }>();
   priorityQueue.enqueue(
@@ -123,13 +150,21 @@ async function greedyBFS(
     0
   );
 
+  const startTime = Date.now();
+
   while (!priorityQueue.isEmpty()) {
     const { word: currentWord, path: currentPath } = priorityQueue.dequeue()!;
     if (visited.has(currentWord)) continue;
+    
+    const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    // stream current path when updated
+    yield JSON.stringify({ path: currentPath, time: elapsedTime});
 
     visited.add(currentWord);
+
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
-      return currentPath;
+      return;
     }
 
     const links = await getLinksFromHTML(currentWord);
@@ -162,9 +197,8 @@ export async function GET(req: NextRequest) {
       }
     );
   }
-  const startTime = new Date().getTime();
   try {
-    //check start and target titles to make sure they exist
+    // check start and target titles to make sure they exist
     const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
     const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
@@ -172,10 +206,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: "Error", status: 404 });
     }
 
-    const result = await greedyBFS(startWord, endWord);
-    const endTime = new Date().getTime();
-    const duration = (endTime - startTime) / 1000;
-    return NextResponse.json({ path: result, time: duration });
+    const iterator = pathFinderIterator(startWord, endWord);
+    const stream = iteratorToStream(iterator);
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/json",
+        "Transfer-Encoding": "chunked",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
   } catch (error: unknown) {
     console.error("Error calling API", error);
     return NextResponse.json({
