@@ -115,12 +115,14 @@ function SearchComponent() {
           placeholder="End"
           className="m-5 border-2 border-black p-3 bg-white"
         />
-        <button
-          className="m-auto my-5 h-12 w-48 relative bg-transparent cursor-pointer border-2 border-black overflow-hidden rounded-full text-black transition-all duration-500 ease-in-out hover:shadow-2xl hover:bg-black hover:text-white"
-          type="submit"
-        >
-          Search
-        </button>
+        {!loading &&
+          (<button
+            className="m-auto my-5 h-12 w-48 relative bg-transparent cursor-pointer border-2 border-black overflow-hidden rounded-full text-black transition-all duration-500 ease-in-out hover:shadow-2xl hover:bg-black hover:text-white"
+            type="submit"
+          >
+            Search
+          </button>)
+        }
       </form>
       {results && (
         <div className="mt-5 text-lg">
