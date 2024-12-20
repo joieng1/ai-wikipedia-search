@@ -8,6 +8,7 @@ const extractor = await pipeline(
   "feature-extraction",
   "Xenova/all-MiniLM-L6-v2"
 );
+const embeddingCache = new Map();
 
 interface wikipediaRes {
   batchcomplete: string;
@@ -29,6 +30,17 @@ interface wikipediaRes {
   limits: {
     links: number;
   };
+}
+
+// cachces all embeddings and returns the cachced result
+async function getEmbedding(word : string) {
+  if (embeddingCache.has(word)) {
+    return embeddingCache.get(word);
+  }
+  const output = await extractor(word, { pooling: "mean", normalize: true });
+  const vector = Array.from(output.data);
+  embeddingCache.set(word, vector);
+  return vector;
 }
 
 // convert an async iterator to a readable stream
@@ -63,10 +75,8 @@ function cosineSimilarity(vec1: number[], vec2: number[]) {
 
 // compares 2 words using the feature extraction pipeline and cosine similarity
 async function compareTwoWords(word1: string, word2: string) {
-  const output1 = await extractor(word1, { pooling: "mean", normalize: true });
-  const output2 = await extractor(word2, { pooling: "mean", normalize: true });
-  const vec1 = Array.from(output1.data);
-  const vec2 = Array.from(output2.data);
+  const vec1 = await getEmbedding(word1);
+  const vec2 = await getEmbedding(word2);
   return cosineSimilarity(vec1, vec2);
 }
 
