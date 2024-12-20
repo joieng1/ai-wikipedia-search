@@ -56,6 +56,7 @@ function SearchComponent() {
           // process each update received from the server
           updates.forEach((update) => {
             try {
+              // parse twice to get json object
               const parsed = JSON.parse(JSON.parse(update));
               // if path update, update the results
               if (parsed.path) {

@@ -9,6 +9,7 @@ const extractor = await pipeline(
   "Xenova/all-MiniLM-L6-v2"
 );
 const embeddingCache = new Map();
+const linkCache = new Map();
 
 interface wikipediaRes {
   batchcomplete: string;
@@ -82,6 +83,9 @@ async function compareTwoWords(word1: string, word2: string) {
 
 // extract links from the HTML content of a Wikipedia page
 async function getLinksFromHTML(title: string) {
+  if (linkCache.get(title) != null) {
+    return linkCache.get(title);
+  }
   try {
     // extract the HTML content from wikipedia
     const response = await fetch(
@@ -211,7 +215,9 @@ export async function GET(req: NextRequest) {
     const stream = iteratorToStream(iterator);
     return new Response(stream, {
       headers: {
-        "Content-Type": "application/json",
+        // "Content-Type": "application/json",
+        // use this to prevent cloudflare tunnel from buffering response
+        "Content-Type": "text/event-stream", 
         "Transfer-Encoding": "chunked",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
