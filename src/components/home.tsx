@@ -53,12 +53,11 @@ function SearchComponent() {
           const updates = chunk
             .split("\n")
             .filter((line) => line.trim().length > 0);
-
           // process each update received from the server
           updates.forEach((update) => {
             try {
-              const parsed = JSON.parse(update);
-              console.log(parsed)
+              // parse twice to get json object
+              const parsed = JSON.parse(JSON.parse(update));
               // if path update, update the results
               if (parsed.path) {
                 setResults((prev) => {
