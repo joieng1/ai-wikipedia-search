@@ -53,11 +53,21 @@ function SearchComponent() {
           const updates = chunk
             .split("\n")
             .filter((line) => line.trim().length > 0);
+
           // process each update received from the server
           updates.forEach((update) => {
             try {
               // parse twice to get json object
               const parsed = JSON.parse(JSON.parse(update));
+
+              // if error, handle the error
+              if (parsed.error) {
+                console.error(parsed.error);
+                alert(parsed.error);
+                setLoading(false);
+                return;
+              }
+
               // if path update, update the results
               if (parsed.path) {
                 setResults((prev) => {
@@ -79,7 +89,8 @@ function SearchComponent() {
       }
       setLoading(false);
     } catch (error) {
-      alert("Not valid wikipedia article");
+      console.log(error);
+      alert("Error occured while fetching or processing the update.");
       setLoading(false);
     }
   }

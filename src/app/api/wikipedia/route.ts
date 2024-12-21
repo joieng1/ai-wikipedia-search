@@ -148,6 +148,15 @@ async function getLinksFromHTML(title: string) {
 
 // async generator function to find the path between two words
 async function* pathFinderIterator(startWord : string, endWord : string) {
+  // check start and target titles to make sure they exist
+  const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
+  const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
+
+  if (!link1.ok || !link2.ok) {
+    yield JSON.stringify({ error: "Given one or more invalid wikipedia title"});
+    return;
+  }
+
   const visited = new Set<string>();
   const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string }[] }>();
   priorityQueue.enqueue(
@@ -162,6 +171,12 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
     if (visited.has(currentWord)) continue;
     
     const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    // check if the elapsed time exceeds maxDuration
+    if (parseFloat(elapsedTime) > maxDuration) {
+      yield JSON.stringify({ error: "Exceeded maximum duration" });
+      return;
+    }
 
     // stream current path when updated
     yield JSON.stringify({ path: currentPath, time: elapsedTime});
@@ -203,14 +218,6 @@ export async function GET(req: NextRequest) {
     );
   }
   try {
-    // check start and target titles to make sure they exist
-    const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
-    const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
-
-    if (!link1.ok || !link2.ok) {
-      return NextResponse.json({ message: "Error", status: 404 });
-    }
-
     const iterator = pathFinderIterator(startWord, endWord);
     const stream = iteratorToStream(iterator);
     return new Response(stream, {
