@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
-import { PriorityQueue } from "@/lib/PriorityQueue";
 import * as cheerio from "cheerio";
-export const maxDuration = 60
+export const maxDuration = 60;
 
 const extractor = await pipeline(
   "feature-extraction",
@@ -11,30 +10,8 @@ const extractor = await pipeline(
 const embeddingCache = new Map();
 const linkCache = new Map();
 
-interface wikipediaRes {
-  batchcomplete: string;
-  query: {
-    normalized: { from: string | null; to: string }[];
-    pages: {
-      [key: string]: {
-        missing?: undefined;
-        pageid: number;
-        ns: number;
-        title: string;
-        links: {
-          ns: number;
-          title: string;
-        }[];
-      };
-    };
-  };
-  limits: {
-    links: number;
-  };
-}
-
 // cachces all embeddings and returns the cachced result
-async function getEmbedding(word : string) {
+async function getEmbedding(word: string) {
   if (embeddingCache.has(word)) {
     return embeddingCache.get(word);
   }
@@ -107,10 +84,7 @@ async function getLinksFromHTML(title: string) {
     let reachedReferences = false;
 
     $("*").each((index, element) => {
-      if (
-        $(element).is("h2") &&
-        $(element).attr("id") == "References" 
-      ) {
+      if ($(element).is("h2") && $(element).attr("id") == "References") {
         reachedReferences = true;
         return false;
       }
@@ -123,16 +97,16 @@ async function getLinksFromHTML(title: string) {
           !href.startsWith("/wiki/File:") &&
           !href.startsWith("/wiki/Portal:") &&
           !href.startsWith("/wiki/Category:") &&
-          !href.startsWith("/wiki/Wikipedia:") && 
-          !href.startsWith("/wiki/Special:") && 
-          !href.startsWith("/wiki/Help:") && 
-          !href.startsWith("/wiki/Template:") && 
+          !href.startsWith("/wiki/Wikipedia:") &&
+          !href.startsWith("/wiki/Special:") &&
+          !href.startsWith("/wiki/Help:") &&
+          !href.startsWith("/wiki/Template:") &&
           href.startsWith("/wiki")
         ) {
           // store href and the inner text of the <a> tag
           wikiLinks.push({
             href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // Cleaning up href
-            text: text.trim() // removestext between <a> and </a>
+            text: `${text.trim()}`, // removestext between <a> and </a>
           });
         }
       }
@@ -147,29 +121,27 @@ async function getLinksFromHTML(title: string) {
 }
 
 // async generator function to find the path between two words
-async function* pathFinderIterator(startWord : string, endWord : string) {
+async function* pathFinderIterator(startWord: string, endWord: string) {
   // check start and target titles to make sure they exist
   const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
   const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
   if (!link1.ok || !link2.ok) {
-    yield JSON.stringify({ error: "Given one or more invalid wikipedia title"});
+    yield JSON.stringify({
+      error: "Given one or more invalid wikipedia title",
+    });
     return;
   }
 
   const visited = new Set<string>();
-  const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string }[] }>();
-  priorityQueue.enqueue(
-    { word: startWord, path: [{ href: startWord, text: startWord }] },
-    0
-  );
+  let currentWord = startWord;
+  let currentPath = [{ href: startWord, text: startWord }];
 
   const startTime = Date.now();
 
-  while (!priorityQueue.isEmpty()) {
-    const { word: currentWord, path: currentPath } = priorityQueue.dequeue()!;
+  while (true) {
     if (visited.has(currentWord)) continue;
-    
+
     const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
     // check if the elapsed time exceeds maxDuration
@@ -179,31 +151,42 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
     }
 
     // stream current path when updated
-    yield JSON.stringify({ path: currentPath, time: elapsedTime});
+    yield JSON.stringify({ path: currentPath, time: elapsedTime });
 
     visited.add(currentWord);
 
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
+      console.log(currentPath);
       return;
     }
 
     const links = await getLinksFromHTML(currentWord);
 
     if (links !== null) {
+      let bestLink = null;
+      let highestScore = -Infinity;
+
       for (const linkObj of links) {
         const { href, text } = linkObj;
         if (visited.has(href)) continue;
         const similarity = await compareTwoWords(href, endWord);
 
-        const newPath = [...currentPath, {href,text}];
-        priorityQueue.enqueue({ word: href, path: newPath }, similarity);
+        if (similarity > highestScore) {
+          highestScore = similarity;
+          bestLink = { href, text };
+        }
+      }
+      // go the next best link
+      if (bestLink) {
+        currentPath = [...currentPath, bestLink];
+        currentWord = bestLink.href;
+      } else {
+        throw new Error(
+          "No path to target page found. The target may not be reachable."
+        );
       }
     }
   }
-
-  throw new Error(
-    "No path to target page found. The target may not be reachable."
-  );
 }
 
 export async function GET(req: NextRequest) {
@@ -224,10 +207,10 @@ export async function GET(req: NextRequest) {
       headers: {
         // "Content-Type": "application/json",
         // use this to prevent cloudflare tunnel from buffering response
-        "Content-Type": "text/event-stream", 
+        "Content-Type": "text/event-stream",
         "Transfer-Encoding": "chunked",
         "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
       },
     });
   } catch (error: unknown) {
