@@ -134,7 +134,9 @@ function SearchComponent() {
                   rel="noopener noreferrer"
                   className="text-blue-500 underline"
                 >
+                  {/* {step.origin + ", " + step.text} */}
                   {step.text}
+
                 </a>
                 {/* every element except the last element will render "->" */}
                 {index < results.length - 1 && " -> "}

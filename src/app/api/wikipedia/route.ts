@@ -2,14 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
 import * as cheerio from "cheerio";
-export const maxDuration = 60
+export const maxDuration = 10
 
-let extractor: any;
-
-(async () => {
-  extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-})();
-
+const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
 const embeddingCache = new Map();
 const linkCache = new Map();
 
@@ -83,13 +78,17 @@ async function getLinksFromHTML(title: string) {
 
     //use cheerio to parse html and collect links up until references
     const $ = cheerio.load(htmlContent);
+
+    //remove td elements with sidebar content
+    $("td.sidebar-content").remove();
+
     const wikiLinks: { href: string; text: string, origin: string }[] = [];
     let reachedReferences = false;
 
     $("*").each((index, element) => {
       if (
         $(element).is("h2") &&
-        $(element).attr("id") == "References" 
+        ($(element).attr("id") == "References" || $(element).attr("id") == "Notes_and_references")
       ) {
         reachedReferences = true;
         return false;
@@ -142,7 +141,7 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
 
   const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string, origin: string }[]}>();
   priorityQueue.enqueue(
-    { word: startWord, path: [{ href: startWord, text: startWord, origin: startWord}]},
+    { word: startWord, path: [{ href: startWord, text: startWord, origin: ""}]},
     0
   );
 
@@ -163,7 +162,6 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
     visited.add(currentWord);
   
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
-      console.log("FinalPath " + currentPath);
       return;
     }
   
