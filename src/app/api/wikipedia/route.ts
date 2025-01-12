@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
+import { PriorityQueue } from "@/lib/PriorityQueue";
 import * as cheerio from "cheerio";
-export const maxDuration = 60;
+export const maxDuration = 60
 
-const extractor = await pipeline(
-  "feature-extraction",
-  "Xenova/all-MiniLM-L6-v2"
-);
+let extractor: any;
+
+(async () => {
+  extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+})();
+
 const embeddingCache = new Map();
 const linkCache = new Map();
 
 // cachces all embeddings and returns the cachced result
-async function getEmbedding(word: string) {
+async function getEmbedding(word : string) {
   if (embeddingCache.has(word)) {
     return embeddingCache.get(word);
   }
@@ -80,11 +83,14 @@ async function getLinksFromHTML(title: string) {
 
     //use cheerio to parse html and collect links up until references
     const $ = cheerio.load(htmlContent);
-    const wikiLinks: { href: string; text: string }[] = [];
+    const wikiLinks: { href: string; text: string, origin: string }[] = [];
     let reachedReferences = false;
 
     $("*").each((index, element) => {
-      if ($(element).is("h2") && $(element).attr("id") == "References") {
+      if (
+        $(element).is("h2") &&
+        $(element).attr("id") == "References" 
+      ) {
         reachedReferences = true;
         return false;
       }
@@ -97,16 +103,17 @@ async function getLinksFromHTML(title: string) {
           !href.startsWith("/wiki/File:") &&
           !href.startsWith("/wiki/Portal:") &&
           !href.startsWith("/wiki/Category:") &&
-          !href.startsWith("/wiki/Wikipedia:") &&
-          !href.startsWith("/wiki/Special:") &&
-          !href.startsWith("/wiki/Help:") &&
-          !href.startsWith("/wiki/Template:") &&
+          !href.startsWith("/wiki/Wikipedia:") && 
+          !href.startsWith("/wiki/Special:") && 
+          !href.startsWith("/wiki/Help:") && 
+          !href.startsWith("/wiki/Template:") && 
           href.startsWith("/wiki")
         ) {
           // store href and the inner text of the <a> tag
           wikiLinks.push({
             href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // Cleaning up href
-            text: `${text.trim()}`, // removestext between <a> and </a>
+            text: text.trim(), // removes text between <a> and </a>
+            origin: title,
           });
         }
       }
@@ -121,73 +128,87 @@ async function getLinksFromHTML(title: string) {
 }
 
 // async generator function to find the path between two words
-async function* pathFinderIterator(startWord: string, endWord: string) {
+async function* pathFinderIterator(startWord : string, endWord : string) {
   // check start and target titles to make sure they exist
   const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
   const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
   if (!link1.ok || !link2.ok) {
-    yield JSON.stringify({
-      error: "Given one or more invalid wikipedia title",
-    });
+    yield JSON.stringify({ error: "Given one or more invalid wikipedia title"});
     return;
   }
 
   const visited = new Set<string>();
-  let currentWord = startWord;
-  let currentPath = [{ href: startWord, text: startWord }];
+
+  const priorityQueue = new PriorityQueue<{ word: string; path: { href: string, text: string, origin: string }[]}>();
+  priorityQueue.enqueue(
+    { word: startWord, path: [{ href: startWord, text: startWord, origin: startWord}]},
+    0
+  );
 
   const startTime = Date.now();
 
-  while (true) {
+  while (!priorityQueue.isEmpty()) {
+    const { word: currentWord, path: currentPath } = priorityQueue.dequeue()!;
     if (visited.has(currentWord)) continue;
-
+  
     const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-
-    // check if the elapsed time exceeds maxDuration
     if (parseFloat(elapsedTime) > maxDuration) {
       yield JSON.stringify({ error: "Exceeded maximum duration" });
       return;
     }
-
-    // stream current path when updated
+  
     yield JSON.stringify({ path: currentPath, time: elapsedTime });
-
+  
     visited.add(currentWord);
-
+  
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
-      console.log(currentPath);
+      console.log("FinalPath " + currentPath);
       return;
     }
-
+  
     const links = await getLinksFromHTML(currentWord);
-
+  
     if (links !== null) {
-      let bestLink = null;
-      let highestScore = -Infinity;
-
       for (const linkObj of links) {
         const { href, text } = linkObj;
         if (visited.has(href)) continue;
+      
         const similarity = await compareTwoWords(href, endWord);
-
-        if (similarity > highestScore) {
-          highestScore = similarity;
-          bestLink = { href, text };
-        }
-      }
-      // go the next best link
-      if (bestLink) {
-        currentPath = [...currentPath, bestLink];
-        currentWord = bestLink.href;
-      } else {
-        throw new Error(
-          "No path to target page found. The target may not be reachable."
-        );
+        const newPath = [...currentPath, { href, text, origin: currentWord }];
+        const cleanedPath = cleanPath(newPath); // Clean the path to remove redundant origins
+        priorityQueue.enqueue({ word: href, path: cleanedPath }, similarity);
       }
     }
   }
+
+  throw new Error(
+    "No path to target page found. The target may not be reachable."
+  );
 }
+
+function cleanPath(path: { href: string; text: string; origin: string }[]) {
+  const visitedOrigins = new Map<string, number>();
+  const cleanedPath: { href: string; text: string; origin: string }[] = [];
+
+  for (let i = 0; i < path.length; i++) {
+    const node = path[i];
+    if (visitedOrigins.has(node.origin)) {
+      // Remove all nodes between the first occurrence and now
+      const startIndex = visitedOrigins.get(node.origin)!;
+      // Keep all nodes up to the first occurrence of the repeated origin
+      return path.slice(0, startIndex + 1);
+    } else {
+      visitedOrigins.set(node.origin, cleanedPath.length);
+      cleanedPath.push(node); // Add the current node to the cleaned path
+    }
+  }
+
+  // console.log(cleanedPath);
+
+  return cleanedPath;
+}
+
 
 export async function GET(req: NextRequest) {
   const startWord = req.nextUrl.searchParams.get("startWord");
@@ -207,10 +228,10 @@ export async function GET(req: NextRequest) {
       headers: {
         // "Content-Type": "application/json",
         // use this to prevent cloudflare tunnel from buffering response
-        "Content-Type": "text/event-stream",
+        "Content-Type": "text/event-stream", 
         "Transfer-Encoding": "chunked",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive",
+        "Connection": "keep-alive",
       },
     });
   } catch (error: unknown) {
