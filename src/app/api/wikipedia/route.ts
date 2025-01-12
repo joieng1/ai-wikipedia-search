@@ -204,8 +204,6 @@ function cleanPath(path: { href: string; text: string; origin: string }[]) {
     }
   }
 
-  // console.log(cleanedPath);
-
   return cleanedPath;
 }
 
