@@ -5,6 +5,7 @@ import { ClipLoader } from "react-spinners";
 interface Step {
   href: string;
   text: string;
+  origin: string;
 }
 
 function SearchComponent() {
@@ -70,12 +71,7 @@ function SearchComponent() {
 
               // if path update, update the results
               if (parsed.path) {
-                setResults((prev) => {
-                  const newSteps = parsed.path.filter(
-                    (step: Step) => !prev.some((s) => s.href === step.href)
-                  );
-                  return [...prev, ...newSteps];
-                });
+                setResults(parsed.path);
               }
 
               if (parsed.time) {
@@ -138,7 +134,7 @@ function SearchComponent() {
                   rel="noopener noreferrer"
                   className="text-blue-500 underline"
                 >
-                  {step.text || step.href}
+                  {step.text}
                 </a>
                 {/* every element except the last element will render "->" */}
                 {index < results.length - 1 && " -> "}
