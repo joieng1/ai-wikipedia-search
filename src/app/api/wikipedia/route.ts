@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
-import * as cheerio from "cheerio";
-export const maxDuration = 60
+import { getLinks , Link } from "@/lib/db";
 
 const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+const maxDuration = 60
 const embeddingCache = new Map();
 const linkCache = new Map();
 let embeddingTime = 0;
@@ -71,84 +71,44 @@ async function compareTwoWords(word1: string, word2: string) {
   return cosineSimilarity(vec1, vec2);
 }
 
-// extract links from the HTML content of a Wikipedia page
-async function getLinksFromHTML(title: string) {
+// extract links from local database
+async function getLinksFromDB(title: string) {
   const startTime = Date.now();
 
   if (linkCache.get(title) != null) {
-    return linkCache.get(title);
+      return linkCache.get(title);
   }
-  try {
-    // extract the HTML content from wikipedia
-    const response = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(
-        title
-      )}&format=json&origin=*`
-    );
-    const data = await response.json();
 
-    if (data.error) {
-      console.error("Error fetching the page:", data.error);
+  const links  = getLinks(title);
+  if (links.length === 0) {
+      console.error('No links found for:', title);
       return null;
-    }
-    const htmlContent: string = data.parse.text["*"];
-
-    //use cheerio to parse html and collect links up until references
-    const $ = cheerio.load(htmlContent);
-
-    //remove td elements with sidebar content
-    $("td.sidebar-content").remove();
-
-    const wikiLinks: { href: string; text: string, origin: string }[] = [];
-    let reachedReferences = false;
-
-    $("*").each((index, element) => {
-      // check if we've reached the "References" section
-      if (
-        $(element).is("h2") &&
-        ($(element).attr("id") === "References" || $(element).attr("id") === "Notes_and_references")
-      ) {
-        reachedReferences = true;
-        return false; //break loop
-      }
-
-      // process only <a> tags and skip if we've reached the references
-      if (!reachedReferences && $(element).is("a[href^='/wiki/']")) {
-        const href = $(element).attr("href");
-        const text = $(element).text().trim();
-
-        if (
-          href &&
-          !href.startsWith("/wiki/File:") &&
-          !href.startsWith("/wiki/Portal:") &&
-          !href.startsWith("/wiki/Category:") &&
-          !href.startsWith("/wiki/Wikipedia:") &&
-          !href.startsWith("/wiki/Special:") &&
-          !href.startsWith("/wiki/Help:") &&
-          !href.startsWith("/wiki/Template:")
-        ) {
-          wikiLinks.push({
-            href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // clean up href
-            text: text,
-            origin: title,
-          });
-        }
-      }
-    });
-
-    linkCache.set(title, wikiLinks);
-    const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    getLinksFromHTMLTime += parseFloat(elapsedTime);
-    return wikiLinks;
-  } catch (error) {
-    console.error("Error:", error);
-    return null;
   }
+
+  const formattedLinks = links.map(link => ({
+      href: link.to_page,
+      text: link.anchor,
+      origin: title
+  }));
+
+  linkCache.set(title, formattedLinks);
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  getLinksFromHTMLTime += parseFloat(elapsedTime);
+  return formattedLinks;
 }
+
+// Utility function to capitalize the first letter of a string
+function capitalizeFirstLetter(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
 
 // async generator function to find the path between two words
 async function* pathFinderIterator(startWord : string, endWord : string) {
   // check start and target titles to make sure they exist
+  startWord = capitalizeFirstLetter(startWord);
+  endWord = capitalizeFirstLetter(endWord);
+  
   const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
   const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
@@ -186,7 +146,7 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
       return;
     }
   
-    const links = await getLinksFromHTML(currentWord);
+    const links = await getLinksFromDB(currentWord);
   
     if (links !== null) {
       for (const linkObj of links) {
