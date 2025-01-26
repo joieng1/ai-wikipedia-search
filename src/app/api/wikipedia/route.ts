@@ -1,21 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
-import * as cheerio from "cheerio";
-export const maxDuration = 60
+import { getLinks , Link } from "@/lib/db";
 
 const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+const maxDuration = 60
 const embeddingCache = new Map();
 const linkCache = new Map();
+let embeddingTime = 0;
+let cosineTime = 0;
+let compareTwoWordsTime = 0;
+let getLinksFromHTMLTime = 0;
+let cleanPathTime = 0
 
 // cachces all embeddings and returns the cachced result
 async function getEmbedding(word : string) {
+  const startTime = Date.now();
+  
   if (embeddingCache.has(word)) {
     return embeddingCache.get(word);
   }
   const output = await extractor(word, { pooling: "mean", normalize: true });
   const vector = Array.from(output.data);
   embeddingCache.set(word, vector);
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  embeddingTime += parseFloat(elapsedTime);
   return vector;
 }
 
@@ -36,6 +45,7 @@ function iteratorToStream(iterator: any) {
 
 // calculate the cosine similarity between two vectors
 function cosineSimilarity(vec1: number[], vec2: number[]) {
+  const startTime = Date.now();
   const dotProduct = vec1.reduce(
     (sum: any, val: any, i: any) => sum + val * vec2[i],
     0
@@ -46,89 +56,59 @@ function cosineSimilarity(vec1: number[], vec2: number[]) {
   const magnitude2 = Math.sqrt(
     vec2.reduce((sum: any, val: any) => sum + val * val, 0)
   );
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  cosineTime += parseFloat(elapsedTime);
   return dotProduct / (magnitude1 * magnitude2);
 }
 
 // compares 2 words using the feature extraction pipeline and cosine similarity
 async function compareTwoWords(word1: string, word2: string) {
+  const startTime = Date.now();
   const vec1 = await getEmbedding(word1);
   const vec2 = await getEmbedding(word2);
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  compareTwoWordsTime += parseFloat(elapsedTime);
   return cosineSimilarity(vec1, vec2);
 }
 
-// extract links from the HTML content of a Wikipedia page
-async function getLinksFromHTML(title: string) {
+// extract links from local database
+async function getLinksFromDB(title: string) {
+  const startTime = Date.now();
+
   if (linkCache.get(title) != null) {
-    return linkCache.get(title);
+      return linkCache.get(title);
   }
-  try {
-    // extract the HTML content from wikipedia
-    const response = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(
-        title
-      )}&format=json&origin=*`
-    );
-    const data = await response.json();
 
-    if (data.error) {
-      console.error("Error fetching the page:", data.error);
+  const links  = getLinks(title);
+  if (links.length === 0) {
+      console.error('No links found for:', title);
       return null;
-    }
-    const htmlContent: string = data.parse.text["*"];
-
-    //use cheerio to parse html and collect links up until references
-    const $ = cheerio.load(htmlContent);
-
-    //remove td elements with sidebar content
-    $("td.sidebar-content").remove();
-
-    const wikiLinks: { href: string; text: string, origin: string }[] = [];
-    let reachedReferences = false;
-
-    $("*").each((index, element) => {
-      if (
-        $(element).is("h2") &&
-        ($(element).attr("id") == "References" || $(element).attr("id") == "Notes_and_references")
-      ) {
-        reachedReferences = true;
-        return false;
-      }
-
-      if (!reachedReferences) {
-        let href = $(element).attr("href");
-        const text = $(element).text();
-        if (
-          href &&
-          !href.startsWith("/wiki/File:") &&
-          !href.startsWith("/wiki/Portal:") &&
-          !href.startsWith("/wiki/Category:") &&
-          !href.startsWith("/wiki/Wikipedia:") && 
-          !href.startsWith("/wiki/Special:") && 
-          !href.startsWith("/wiki/Help:") && 
-          !href.startsWith("/wiki/Template:") && 
-          href.startsWith("/wiki")
-        ) {
-          // store href and the inner text of the <a> tag
-          wikiLinks.push({
-            href: decodeURIComponent(href.replace(/_/g, " ").substring(6)), // Cleaning up href
-            text: text.trim(), // removes text between <a> and </a>
-            origin: title,
-          });
-        }
-      }
-    });
-
-    linkCache.set(title, wikiLinks);
-    return wikiLinks;
-  } catch (error) {
-    console.error("Error:", error);
-    return null;
   }
+
+  const formattedLinks = links.map(link => ({
+      href: link.to_page,
+      text: link.anchor,
+      origin: title
+  }));
+
+  linkCache.set(title, formattedLinks);
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  getLinksFromHTMLTime += parseFloat(elapsedTime);
+  return formattedLinks;
 }
+
+// Utility function to capitalize the first letter of a string
+function capitalizeFirstLetter(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
 
 // async generator function to find the path between two words
 async function* pathFinderIterator(startWord : string, endWord : string) {
   // check start and target titles to make sure they exist
+  startWord = capitalizeFirstLetter(startWord);
+  endWord = capitalizeFirstLetter(endWord);
+  
   const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
   const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
 
@@ -162,10 +142,11 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
     visited.add(currentWord);
   
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
+      console.log("All times\nEmbedding time: " + embeddingTime + " seconds\nCosine similarity time: " + cosineTime + " seconds\nCompare two words time: " + compareTwoWordsTime + " seconds\nGet links from HTML time: " + getLinksFromHTMLTime + " seconds\nClean path time: " + cleanPathTime + " seconds");
       return;
     }
   
-    const links = await getLinksFromHTML(currentWord);
+    const links = await getLinksFromDB(currentWord);
   
     if (links !== null) {
       for (const linkObj of links) {
@@ -174,7 +155,7 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
       
         const similarity = await compareTwoWords(href, endWord);
         const newPath = [...currentPath, { href, text, origin: currentWord }];
-        const cleanedPath = cleanPath(newPath); // Clean the path to remove redundant origins
+        const cleanedPath = cleanPath(newPath); // clean the path to remove redundant origins
         priorityQueue.enqueue({ word: href, path: cleanedPath }, similarity);
       }
     }
@@ -186,6 +167,7 @@ async function* pathFinderIterator(startWord : string, endWord : string) {
 }
 
 function cleanPath(path: { href: string; text: string; origin: string }[]) {
+  const startTime = Date.now();
   const visitedOrigins = new Map<string, number>();
   const cleanedPath: { href: string; text: string; origin: string }[] = [];
 
@@ -201,7 +183,8 @@ function cleanPath(path: { href: string; text: string; origin: string }[]) {
       cleanedPath.push(node); // Add the current node to the cleaned path
     }
   }
-
+  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  cleanPathTime += parseFloat(elapsedTime);
   return cleanedPath;
 }
 
