@@ -20,7 +20,7 @@ db.exec(`
   PRAGMA synchronous = OFF;         -- Disables disk synchronization
   PRAGMA cache_size = 1000000;       -- Increases in-memory cache
   PRAGMA temp_store = MEMORY;        -- Store temp data in memory
-  PRAGMA locking_mode = EXCLUSIVE;   -- No contention with other processes
+  PRAGMA locking_mode = Normal;   -- No contention with other processes
   PRAGMA mmap_size = 268435456;      -- Use memory mapping to speed up large reads
 `);
 
