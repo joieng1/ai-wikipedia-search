@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, CSSProperties, useEffect } from "react";
-import { ClipLoader } from "react-spinners";
+import ClipLoader from "react-spinners/ClipLoader";
+
 
 interface Step {
   href: string;
@@ -18,7 +19,7 @@ function SearchComponent() {
   const override: CSSProperties = {
     display: "block",
     margin: "0 auto",
-    borderColor: "black",
+    borderColor: "white",
   };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -127,12 +128,18 @@ return (
             onChange={(e) => setEnd(e.target.value)}
           />
         </div>
-        <button
-          type="submit"
-          className="w-full p-4 bg-[#00ff9d] rounded-lg text-[#1a1a1a] font-semibold uppercase tracking-wide hover:shadow-[0_0_16px_rgba(0,255,157,0.4)] transition-all"
-        >
-          Start Challenge
-        </button>
+        {loading ? (
+            <div className="flex justify-center">
+              <ClipLoader color="#00ff9d" loading={loading} cssOverride={override} size={35} />
+            </div>
+          ) : (
+            <button
+              type="submit"
+              className="w-full p-4 bg-[#00ff9d] rounded-lg text-[#1a1a1a] font-semibold uppercase tracking-wide hover:shadow-[0_0_16px_rgba(0,255,157,0.4)] transition-all"
+            >
+              Start Challenge
+            </button>
+          )}
       </form>
     </div>
 
@@ -156,7 +163,19 @@ return (
       className="bg-[#2d2d2d] p-6 rounded-lg mb-8 min-h-[100px] font-mono text-lg whitespace-pre-wrap"
     >
       {results.map((step, i) => (
-        <div key={i}>{step.text}</div>
+        <div key={i}>
+          <a
+            key={i}
+            href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
+              step.href
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-500 underline"
+          >
+            {step.text}
+          </a>
+        </div>
       ))}
     </div>
     <div id="progressTracker" className="flex gap-2 flex-wrap"></div>

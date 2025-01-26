@@ -21,7 +21,7 @@ db.exec(`
   PRAGMA cache_size = 1000000;       -- Increases in-memory cache
   PRAGMA temp_store = MEMORY;        -- Store temp data in memory
   PRAGMA locking_mode = Normal;   -- No contention with other processes
-  PRAGMA mmap_size = 268435456;      -- Use memory mapping to speed up large reads
+  PRAGMA mmap_size = 536870912;      -- Use memory mapping to speed up large reads
 `);
 
 export function getLinks(title: string) : Link[] {
