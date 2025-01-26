@@ -95,71 +95,74 @@ function SearchComponent() {
     console.log("Updated results:", results);
   }, [results]);
 
-  return (
-    <div className="container mx-auto mt-5 text-2xl border-black border-2 p-2">
-      <h1 className="text-center font-lg">WikiGame Path Generator</h1>
-      <form className="flex flex-col" onSubmit={(e) => handleSubmit(e)}>
-        <input
-          value={start}
-          onChange={(e) => setStart(e.target.value)}
-          placeholder="Start"
-          className="m-5 border-2 border-black p-3 bg-white"
-        />
-        <input
-          value={end}
-          onChange={(e) => setEnd(e.target.value)}
-          placeholder="End"
-          className="m-5 border-2 border-black p-3 bg-white"
-        />
-        {!loading &&
-          (<button
-            className="m-auto my-5 h-12 w-48 relative bg-transparent cursor-pointer border-2 border-black overflow-hidden rounded-full text-black transition-all duration-500 ease-in-out hover:shadow-2xl hover:bg-black hover:text-white"
-            type="submit"
-          >
-            Search
-          </button>)
-        }
-      </form>
-      {results && (
-        <div className="mt-5 text-lg">
-          <p>Path:</p>
-          <ul>
-            {results.map((step, index) => (
-              <li key={index} className="inline">
-                <a
-                  href={`https://en.wikipedia.org/wiki/${encodeURIComponent(
-                    step.href
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 underline"
-                >
-                  {/* {step.origin + ", " + step.text} */}
-                  {step.text}
+// ...existing code...
+return (
+  <div className="w-full mx-auto bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] min-h-screen p-8 text-white font-sans">
+    <header className="text-center mb-8">
+      <h1 className="text-3xl font-bold">WikiPath Solver</h1>
+      <p className="text-[#b3b3b3] mt-2 text-lg">AI-Powered Wikipedia Navigation</p>
+    </header>
 
-                </a>
-                {/* every element except the last element will render "->" */}
-                {index < results.length - 1 && " -> "}
-              </li>
-            ))}
-          </ul>
-          <p>Path Length: {results.length}</p>
-          <p>Time taken: {timeElapsed}s</p>
+    <div className="bg-[#2d2d2d] p-8 rounded-xl shadow-lg mb-8">
+      <form onSubmit={handleSubmit}>
+        <div className="flex gap-4 items-center mb-6">
+          <input
+            className="flex-1 p-4 bg-[#383838] border-2 border-[#4d4d4d] rounded-lg text-white focus:outline-none focus:border-[#00ff9d] focus:shadow-[0_0_12px_rgba(0,255,157,0.2)]"
+            type="text"
+            placeholder="Start word"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
+          <svg
+            className="w-8 h-8 fill-[#b3b3b3]"
+            viewBox="0 0 24 24"
+          >
+            <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
+          </svg>
+          <input
+            className="flex-1 p-4 bg-[#383838] border-2 border-[#4d4d4d] rounded-lg text-white focus:outline-none focus:border-[#00ff9d] focus:shadow-[0_0_12px_rgba(0,255,157,0.2)]"
+            type="text"
+            placeholder="End word"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+          />
         </div>
-      )}
-      {loading && (
-        <ClipLoader
-          className="m-auto mt-5"
-          color={"#ffffff"}
-          loading={loading}
-          cssOverride={override}
-          size={150}
-          aria-label="Loading Spinner"
-          data-testid="loader"
-        />
-      )}
+        <button
+          type="submit"
+          className="w-full p-4 bg-[#00ff9d] rounded-lg text-[#1a1a1a] font-semibold uppercase tracking-wide hover:shadow-[0_0_16px_rgba(0,255,157,0.4)] transition-all"
+        >
+          Start Challenge
+        </button>
+      </form>
     </div>
-  );
+
+    <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="bg-[#2d2d2d] p-6 rounded-lg text-center">
+        <span className="block text-[#b3b3b3] text-sm">Time Elapsed</span>
+        <div id="timer" className="text-2xl font-semibold text-[#00ff9d] mt-2">
+          {timeElapsed}
+        </div>
+      </div>
+      <div className="bg-[#2d2d2d] p-6 rounded-lg text-center">
+        <span className="block text-[#b3b3b3] text-sm">Path Length</span>
+        <div id="stepsCounter" className="text-2xl font-semibold text-[#00ff9d] mt-2">
+          {results.length}
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="pathDisplay"
+      className="bg-[#2d2d2d] p-6 rounded-lg mb-8 min-h-[100px] font-mono text-lg whitespace-pre-wrap"
+    >
+      {results.map((step, i) => (
+        <div key={i}>{step.text}</div>
+      ))}
+    </div>
+    <div id="progressTracker" className="flex gap-2 flex-wrap"></div>
+    <div id="errorBox" className="bg-[#4a0000] text-[#ff4d4d] p-4 rounded-lg mt-4 hidden"></div>
+  </div>
+);
 }
 
 export default SearchComponent;
