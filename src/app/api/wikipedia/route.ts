@@ -3,6 +3,20 @@ import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
 import { getLinks, Link } from "@/lib/db";
 
+interface WikiPage {
+  pageid: number;
+  ns: number;
+  title: string;
+}
+
+interface WikiResponse {
+  query: {
+    pages: {
+      [key: string]: WikiPage;
+    };
+  };
+}
+
 const extractor = await pipeline(
   "feature-extraction",
   "Xenova/all-MiniLM-L6-v2"
@@ -120,15 +134,58 @@ async function* pathFinderIterator(startWord: string, endWord: string) {
   startWord = capitalizeFirstLetter(startWord);
   endWord = capitalizeFirstLetter(endWord);
 
-  const link1 = await fetch(`https://en.wikipedia.org/wiki/${startWord}`);
-  const link2 = await fetch(`https://en.wikipedia.org/wiki/${endWord}`);
+  // First, get the redirected URLs
+  const response1 = await fetch(
+    `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+      startWord
+    )}&redirects=true&format=json`,
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      },
+    }
+  );
+  const response2 = await fetch(
+    `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
+      endWord
+    )}&redirects=true&format=json`,
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      },
+    }
+  );
 
-  if (!link1.ok || !link2.ok) {
+  const data1 = (await response1.json()) as WikiResponse;
+  const data2 = (await response2.json()) as WikiResponse;
+
+  // extract the normalized/redirected titles
+  const pages1 = data1.query.pages;
+  const pages2 = data2.query.pages;
+
+  // Wikipedia API uses -1 as key for missing pages
+  const isPage1Missing = Object.keys(pages1)[0] === '-1';
+  const isPage2Missing = Object.keys(pages2)[0] === '-1';
+
+  // check if valid pages
+  if (isPage1Missing || isPage2Missing) {
     yield JSON.stringify({
-      error: "Given one or more invalid wikipedia title",
+      error: `Invalid Wikipedia title${isPage1Missing && isPage2Missing ? 's' : ''}: ${
+        isPage1Missing ? startWord : ''
+      }${isPage1Missing && isPage2Missing ? ' and ' : ''}${
+        isPage2Missing ? endWord : ''
+      }`,
     });
     return;
   }
+
+  // set start and end word to be normalized/redirected titles
+  startWord = Object.values(pages1)[0]?.title || "";
+  endWord = Object.values(pages2)[0]?.title || "";
+
+  console.log(startWord, " ", endWord);
 
   // keep track of visited pages to avoid loops
   const visited = new Set<string>();
@@ -239,45 +296,51 @@ function cleanPath(path: { href: string; text: string; origin: string }[]) {
 async function* biDirectionalPathFinder(startWord: string, endWord: string) {
   const forward = pathFinderIterator(startWord, endWord);
   const backward = pathFinderIterator(endWord, startWord);
+  let forwardFinished = false;
+  let backwardFinished = false;
 
   while (true) {
-    // run both iterators concurrently
-    const [fRes, bRes] = await Promise.allSettled([
+    // Run both updates concurrently
+    const [forwardResult, backwardResult] = await Promise.all([
       forward.next(),
       backward.next(),
     ]);
 
-    // handle forward result
-    if (fRes.status === "fulfilled" && !fRes.value.done) {
-      const parsed = JSON.parse(fRes.value.value);
-      yield fRes.value.value;
+    // get forward update
+    if (!forwardResult.done) {
+      const forwardData = JSON.parse(forwardResult.value);
+      yield JSON.stringify({
+        direction: "forward",
+        ...forwardData,
+      });
 
-      if (parsed.finished) {
-        // if forward path found, stop backward search
-        backward.return?.();
-        return;
+      if (forwardData.finished) {
+        forwardFinished = true;
       }
     }
 
-    // handle backward result
-    if (bRes.status === "fulfilled" && !bRes.value.done) {
-      const parsed = JSON.parse(bRes.value.value);
-      yield bRes.value.value;
+    // get backward update
+    if (!backwardResult.done) {
+      const backwardData = JSON.parse(backwardResult.value);
+      yield JSON.stringify({
+        direction: "backward",
+        ...backwardData,
+      });
 
-      if (parsed.finished) {
-        // if backward path found, stop forward search
-        forward.return?.();
-        return;
+      if (backwardData.finished) {
+        backwardFinished = true;
       }
     }
 
-    // If both searches end with no solution
-    if (
-      fRes.status === "fulfilled" &&
-      fRes.value.done &&
-      bRes.status === "fulfilled" &&
-      bRes.value.done
-    ) {
+    // ff either path is finished, stop both searches
+    if (forwardFinished || backwardFinished) {
+      forward.return?.();
+      backward.return?.();
+      return;
+    }
+
+    // both sides ended without finding a path
+    if (forwardResult.done && backwardResult.done) {
       throw new Error("No path found.");
     }
   }
