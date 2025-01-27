@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import React, { useState, CSSProperties, useEffect } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
 
@@ -243,6 +244,22 @@ function SearchComponent() {
             </div>
           ))}
         </div>
+      </div>
+      <div className="my-4 text-red-400 text-center">
+        <h1 className="">Disclaimer!</h1>
+        <p>
+          The paths generated are only as good as the heuristic generated from
+          this sentence embedding{" "}
+          <span>
+            <Link
+              className="text-blue-500 underline hover:text-blue-700"
+              href="https://huggingface.co/Xenova/all-MiniLM-L6-v2"
+            >
+              model
+            </Link>
+          </span>
+          .
+        </p>
       </div>
     </div>
   );
