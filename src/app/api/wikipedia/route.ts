@@ -24,16 +24,9 @@ const extractor = await pipeline(
 const maxDuration = 60;
 const embeddingCache = new Map();
 const linkCache = new Map();
-let embeddingTime = 0;
-let cosineTime = 0;
-let compareTwoWordsTime = 0;
-let getLinksFromHTMLTime = 0;
-let cleanPathTime = 0;
 
 // cachces all embeddings and returns the cachced result
 async function getEmbedding(word: string) {
-  const startTime = Date.now();
-
   if (embeddingCache.has(word)) {
     return embeddingCache.get(word);
   }
@@ -41,10 +34,6 @@ async function getEmbedding(word: string) {
   const output = await extractor(word, { pooling: "mean", normalize: true });
   const vector = Array.from(output.data);
   embeddingCache.set(word, vector);
-
-  // cache and track total embedding time
-  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-  embeddingTime += parseFloat(elapsedTime);
 
   return vector;
 }
@@ -68,7 +57,6 @@ function iteratorToStream(iterator: any) {
 
 // calculate the cosine similarity between two vectors
 function cosineSimilarity(vec1: number[], vec2: number[]) {
-  const startTime = Date.now();
   const dotProduct = vec1.reduce(
     (sum: any, val: any, i: any) => sum + val * vec2[i],
     0
@@ -79,31 +67,24 @@ function cosineSimilarity(vec1: number[], vec2: number[]) {
   const magnitude2 = Math.sqrt(
     vec2.reduce((sum: any, val: any) => sum + val * val, 0)
   );
-  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-  cosineTime += parseFloat(elapsedTime);
   return dotProduct / (magnitude1 * magnitude2);
 }
 
 // compares 2 words using the feature extraction pipeline and cosine similarity
 async function compareTwoWords(word1: string, word2: string) {
-  const startTime = Date.now();
   const vec1 = await getEmbedding(word1);
   const vec2 = await getEmbedding(word2);
-  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-  compareTwoWordsTime += parseFloat(elapsedTime);
   return cosineSimilarity(vec1, vec2);
 }
 
 // extract links from local database
 async function getLinksFromDB(title: string) {
-  const startTime = Date.now();
-
   if (linkCache.get(title) != null) {
     return linkCache.get(title);
   }
 
   // retrieve links from database
-  const links = getLinks(title);
+  const links = await getLinks(title);
   if (links.length === 0) {
     console.error("No links found for:", title);
     return null;
@@ -117,8 +98,6 @@ async function getLinksFromDB(title: string) {
 
   //cache and track total DB fetch time
   linkCache.set(title, formattedLinks);
-  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-  getLinksFromHTMLTime += parseFloat(elapsedTime);
 
   return formattedLinks;
 }
@@ -221,19 +200,6 @@ async function* pathFinderIterator(startWord: string, endWord: string) {
     visited.add(currentWord);
 
     if (currentWord.toLowerCase() === endWord.toLowerCase()) {
-      console.log(
-        "All times\nEmbedding time: " +
-          embeddingTime +
-          " seconds\nCosine similarity time: " +
-          cosineTime +
-          " seconds\nCompare two words time: " +
-          compareTwoWordsTime +
-          " seconds\nGet links from HTML time: " +
-          getLinksFromHTMLTime +
-          " seconds\nClean path time: " +
-          cleanPathTime +
-          " seconds"
-      );
       yield JSON.stringify({
         path: currentPath,
         time: elapsedTime,
@@ -266,7 +232,6 @@ async function* pathFinderIterator(startWord: string, endWord: string) {
 
 // remove loops from a path by cutting off repeated origins
 function cleanPath(path: { href: string; text: string; origin: string }[]) {
-  const startTime = Date.now();
   const visitedOrigins = new Map<string, number>();
   const cleanedPath: { href: string; text: string; origin: string }[] = [];
 
@@ -287,8 +252,6 @@ function cleanPath(path: { href: string; text: string; origin: string }[]) {
   }
 
   // if no repeated origin, keep entire path
-  const elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
-  cleanPathTime += parseFloat(elapsedTime);
   return cleanedPath;
 }
 
@@ -332,13 +295,9 @@ async function* biDirectionalPathFinder(startWord: string, endWord: string) {
       }
     }
 
-    // ff either path is finished, stop both searches
-    if (forwardFinished || backwardFinished) {
-      forward.return?.();
-      backward.return?.();
+    if(backwardFinished && forwardFinished) {
       return;
     }
-
     // both sides ended without finding a path
     if (forwardResult.done && backwardResult.done) {
       throw new Error("No path found.");
