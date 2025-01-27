@@ -38,6 +38,8 @@ function SearchComponent() {
           },
         }
       );
+
+      // no longer yielding results until complete, so may remove in future
       const reader = response.body?.getReader();
       const decoder = new TextDecoder("utf-8");
       if (!reader) throw new Error("No response body from server");
@@ -71,7 +73,7 @@ function SearchComponent() {
               }
 
               // if path update, update the results
-              if (parsed.path) {
+              if (parsed.finished) {
                 setResults(parsed.path);
               }
 
