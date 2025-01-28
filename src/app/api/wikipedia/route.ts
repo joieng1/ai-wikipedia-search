@@ -17,22 +17,31 @@ interface WikiResponse {
   };
 }
 
-const extractor = await pipeline(
-  "feature-extraction",
-  "Xenova/all-MiniLM-L6-v2"
-);
+enum Model {
+  MiniLM = "Xenova/all-MiniLM-L6-v2",
+  GIST = "Xenova/GIST-small-Embedding-v0",
+  MedEmbed = "Romelianism/MedEmbed-small-v0.1",
+}
+
 const maxDuration = 60;
-const embeddingCache = new Map();
 const linkCache = new Map();
 
+async function createExtractor(model: Model) {
+  return await pipeline("feature-extraction", model);
+}
+
 // cachces all embeddings and returns the cachced result
-async function getEmbedding(word: string) {
+async function getEmbedding(
+  word: string,
+  extractor: any,
+  embeddingCache: Map<string, number[]>
+) {
   if (embeddingCache.has(word)) {
     return embeddingCache.get(word);
   }
   // use xenova pipeline to compute the embedding
   const output = await extractor(word, { pooling: "mean", normalize: true });
-  const vector = Array.from(output.data);
+  const vector = Array.from(output.data as number[]);
   embeddingCache.set(word, vector);
 
   return vector;
@@ -71,9 +80,19 @@ function cosineSimilarity(vec1: number[], vec2: number[]) {
 }
 
 // compares 2 words using the feature extraction pipeline and cosine similarity
-async function compareTwoWords(word1: string, word2: string) {
-  const vec1 = await getEmbedding(word1);
-  const vec2 = await getEmbedding(word2);
+async function compareTwoWords(
+  word1: string,
+  word2: string,
+  extractor: any,
+  embeddingCache: Map<string, number[]>
+) {
+  const vec1 = await getEmbedding(word1, extractor, embeddingCache);
+  const vec2 = await getEmbedding(word2, extractor, embeddingCache);
+
+  if (!vec1 || !vec2) {
+    throw new Error("Embedding not found for one or both words");
+  }
+
   return cosineSimilarity(vec1, vec2);
 }
 
@@ -108,7 +127,12 @@ function capitalizeFirstLetter(word: string): string {
 }
 
 // async generator function to find the path between two words
-async function* pathFinderIterator(startWord: string, endWord: string) {
+async function* pathFinderIterator(
+  startWord: string,
+  endWord: string,
+  extractor: any,
+  embeddingCache: Map<string, number[]>
+) {
   // check start and target titles to make sure they exist
   startWord = capitalizeFirstLetter(startWord);
   endWord = capitalizeFirstLetter(endWord);
@@ -145,17 +169,17 @@ async function* pathFinderIterator(startWord: string, endWord: string) {
   const pages2 = data2.query.pages;
 
   // Wikipedia API uses -1 as key for missing pages
-  const isPage1Missing = Object.keys(pages1)[0] === '-1';
-  const isPage2Missing = Object.keys(pages2)[0] === '-1';
+  const isPage1Missing = Object.keys(pages1)[0] === "-1";
+  const isPage2Missing = Object.keys(pages2)[0] === "-1";
 
   // check if valid pages
   if (isPage1Missing || isPage2Missing) {
     yield JSON.stringify({
-      error: `Invalid Wikipedia title${isPage1Missing && isPage2Missing ? 's' : ''}: ${
-        isPage1Missing ? startWord : ''
-      }${isPage1Missing && isPage2Missing ? ' and ' : ''}${
-        isPage2Missing ? endWord : ''
-      }`,
+      error: `Invalid Wikipedia title${
+        isPage1Missing && isPage2Missing ? "s" : ""
+      }: ${isPage1Missing ? startWord : ""}${
+        isPage1Missing && isPage2Missing ? " and " : ""
+      }${isPage2Missing ? endWord : ""}`,
     });
     return;
   }
@@ -215,7 +239,7 @@ async function* pathFinderIterator(startWord: string, endWord: string) {
         const { href, text } = linkObj;
         if (visited.has(href)) continue;
 
-        const similarity = await compareTwoWords(href, endWord);
+        const similarity = await compareTwoWords(href, endWord, extractor, embeddingCache);
         const newPath = [...currentPath, { href, text, origin: currentWord }];
 
         // clean the path to remove redundant origins
@@ -256,9 +280,24 @@ function cleanPath(path: { href: string; text: string; origin: string }[]) {
 }
 
 // runs pathFinderIterator both ways, yields fastest path to return
-async function* biDirectionalPathFinder(startWord: string, endWord: string) {
-  const forward = pathFinderIterator(startWord, endWord);
-  const backward = pathFinderIterator(endWord, startWord);
+async function* biDirectionalPathFinder(
+  startWord: string,
+  endWord: string,
+  extractor: any,
+  embeddingCache: Map<string, number[]>
+) {
+  const forward = pathFinderIterator(
+    startWord,
+    endWord,
+    extractor,
+    embeddingCache
+  );
+  const backward = pathFinderIterator(
+    endWord,
+    startWord,
+    extractor,
+    embeddingCache
+  );
   let forwardFinished = false;
   let backwardFinished = false;
 
@@ -295,7 +334,7 @@ async function* biDirectionalPathFinder(startWord: string, endWord: string) {
       }
     }
 
-    if(backwardFinished && forwardFinished) {
+    if (backwardFinished && forwardFinished) {
       return;
     }
     // both sides ended without finding a path
@@ -309,6 +348,28 @@ async function* biDirectionalPathFinder(startWord: string, endWord: string) {
 export async function GET(req: NextRequest) {
   const startWord = req.nextUrl.searchParams.get("startWord");
   const endWord = req.nextUrl.searchParams.get("endWord");
+  const modelParam = req.nextUrl.searchParams.get("model");
+  let model: Model | null = null;
+
+  switch (modelParam) {
+    case "0":
+      model = Model.MiniLM;
+      break;
+    case "1":
+      model = Model.GIST;
+      break;
+    case "2":
+      model = Model.MedEmbed;
+      break;
+    default:
+      return new NextResponse(
+        JSON.stringify({ error: "Invalid model parameter" }),
+        {
+          status: 400,
+        }
+      );
+  }
+
   if (startWord === null || endWord === null) {
     return new NextResponse(
       JSON.stringify({ Error: "Title or target word missing" }),
@@ -317,8 +378,11 @@ export async function GET(req: NextRequest) {
       }
     );
   }
+  const embeddingCache = new Map<string, number[]>();
+
   try {
-    const iterator = biDirectionalPathFinder(startWord, endWord);
+    const extractor = await createExtractor(model,embeddingCache);
+    const iterator = biDirectionalPathFinder(startWord, endWord, extractor,embeddingCache);
     const stream = iteratorToStream(iterator);
 
     // return streamed response

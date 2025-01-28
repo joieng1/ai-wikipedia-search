@@ -12,6 +12,7 @@ interface Step {
 function SearchComponent() {
   const [start, setStart] = useState("Video Games");
   const [end, setEnd] = useState("Chemical engineer");
+  const [model, setModel] = useState("0");
   const [pathForward, setPathForward] = useState<Step[]>([]);
   const [pathBackward, setPathBackward] = useState<Step[]>([]);
   const [forwardTime, setForwardTime] = useState<number>(0);
@@ -38,7 +39,7 @@ function SearchComponent() {
 
     try {
       const response = await fetch(
-        `/api/wikipedia?startWord=${start}&endWord=${end}`,
+        `/api/wikipedia?startWord=${start}&endWord=${end}&model=${model}`,
         {
           method: "GET",
           headers: {
@@ -141,6 +142,18 @@ function SearchComponent() {
               value={end}
               onChange={(e) => setEnd(e.target.value)}
             />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4 items-center mb-6">
+            <label className="text-white">Select Model:</label>
+            <select
+              className="flex-1 p-4 bg-[#383838] border-2 border-[#4d4d4d] rounded-lg text-white focus:outline-none focus:border-[#00ff9d] focus:shadow-[0_0_12px_rgba(0,255,157,0.2)]"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+            >
+              <option value="0">Xenova/all-MiniLM-L6-v2</option>
+              <option value="1">XENOVA/GIST-small-Embedding-v0</option>
+              <option value="2">Romelianism/MedEmbed-small-v0.1</option>
+            </select>
           </div>
           {loading ? (
             <div className="flex justify-center">
@@ -249,16 +262,7 @@ function SearchComponent() {
         <h1 className="">Disclaimer!</h1>
         <p>
           The paths generated are only as good as the heuristic generated from
-          this sentence embedding{" "}
-          <span>
-            <Link
-              className="text-blue-500 underline hover:text-blue-700"
-              href="https://huggingface.co/Xenova/all-MiniLM-L6-v2"
-            >
-              model
-            </Link>
-          </span>
-          .
+          the sentence embedding model.
         </p>
       </div>
     </div>
