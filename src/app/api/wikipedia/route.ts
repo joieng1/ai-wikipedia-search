@@ -381,7 +381,7 @@ export async function GET(req: NextRequest) {
   const embeddingCache = new Map<string, number[]>();
 
   try {
-    const extractor = await createExtractor(model,embeddingCache);
+    const extractor = await createExtractor(model);
     const iterator = biDirectionalPathFinder(startWord, endWord, extractor,embeddingCache);
     const stream = iteratorToStream(iterator);
 
