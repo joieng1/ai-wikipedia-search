@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import React, { useState, CSSProperties, useEffect } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
 
@@ -48,7 +47,14 @@ function SearchComponent() {
         }
       );
 
-      // no longer yielding results until complete, so may remove in future
+      // Check for rate limiting
+      if (response.status === 429) {
+        const errorData = await response.json();
+        alert(errorData.error || "Too many requests made, please wait.");
+        setLoading(false);
+        return;
+      }
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder("utf-8");
       if (!reader) throw new Error("No response body from server");

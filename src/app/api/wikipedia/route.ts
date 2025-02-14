@@ -3,6 +3,10 @@ import { pipeline } from "@xenova/transformers";
 import { PriorityQueue } from "@/lib/PriorityQueue";
 import { getLinks, Link } from "@/lib/db";
 
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const rateLimitMap = new Map<string, number[]>();
+
 interface WikiPage {
   pageid: number;
   ns: number;
@@ -346,6 +350,24 @@ async function* biDirectionalPathFinder(
 
 // GET endpoint to run bidirectional path finder and streams response back
 export async function GET(req: NextRequest) {
+  // Extract client IP from headers
+  const clientIP = req.headers.get("x-forwarded-for") || req.ip || "local";
+  const now = Date.now();
+  // Get and update timestamps for this IP
+  const timestamps = rateLimitMap.get(clientIP) || [];
+  // Keep only requests within the window
+  const recentTimestamps = timestamps.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
+  
+  if (recentTimestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    return new NextResponse(
+      JSON.stringify({ error: "Too many requests" }),
+      { status: 429, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  
+  recentTimestamps.push(now);
+  rateLimitMap.set(clientIP, recentTimestamps);
+
   const startWord = req.nextUrl.searchParams.get("startWord");
   const endWord = req.nextUrl.searchParams.get("endWord");
   const modelParam = req.nextUrl.searchParams.get("model");

@@ -1,5 +1,4 @@
 import { Worker } from 'worker_threads';
-import path from 'path';
 
 export interface Link {
   to_page: string;
