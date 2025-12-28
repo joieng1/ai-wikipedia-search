@@ -141,6 +141,9 @@ async function* pathFinderIterator(
   startWord = capitalizeFirstLetter(startWord);
   endWord = capitalizeFirstLetter(endWord);
 
+  // Wikipedia API requires a descriptive User-Agent per their policy
+  const WIKIPEDIA_USER_AGENT = "AIWikipediaSearch/1.0 (https://github.com/joieng1/ai-wikipedia-search)";
+
   // First, get the redirected URLs
   const response1 = await fetch(
     `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(
@@ -148,8 +151,7 @@ async function* pathFinderIterator(
     )}&redirects=true&format=json`,
     {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "User-Agent": WIKIPEDIA_USER_AGENT,
       },
     }
   );
@@ -159,11 +161,17 @@ async function* pathFinderIterator(
     )}&redirects=true&format=json`,
     {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "User-Agent": WIKIPEDIA_USER_AGENT,
       },
     }
   );
+
+  // Validate responses before parsing JSON
+  if (!response1.ok || !response2.ok) {
+    const errorMsg = `Wikipedia API error: ${!response1.ok ? `startWord (${response1.status})` : ""} ${!response2.ok ? `endWord (${response2.status})` : ""}`;
+    yield JSON.stringify({ error: errorMsg });
+    return;
+  }
 
   const data1 = (await response1.json()) as WikiResponse;
   const data2 = (await response2.json()) as WikiResponse;
