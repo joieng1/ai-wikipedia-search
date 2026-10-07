@@ -11,7 +11,7 @@ services:
       MODEL_CACHE_DIR: /app/model-cache
       OMP_NUM_THREADS: '2'
     ports:
-      - '127.0.0.1:3010:3000'
+      - '127.0.0.1:3011:3000'
     volumes:
       - /data/ai-wikipedia/database:/app/data:ro,z
       - /data/ai-wikipedia/model-cache:/app/model-cache:z

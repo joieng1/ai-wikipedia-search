@@ -12,7 +12,7 @@ Run `npm test` for the database worker regression tests and `npm run build` for 
 
 The self-hosted Coolify application builds `Dockerfile` using `/compose.oracle.yaml` from the GitHub `main` branch. Each image build runs the worker tests and production build before creating the runtime image. GitHub Actions runs the same checks for pull requests and pushes.
 
-The container runs as the non-root `node` user and listens only on host `127.0.0.1:3010`. Cloudflare Tunnel publishes it at https://ai-wikipedia-search.johnieng.com. `/api/health` checks database access.
+The container runs as the non-root `node` user and listens only on host `127.0.0.1:3011`. Cloudflare Tunnel publishes it at https://ai-wikipedia-search.johnieng.com. `/api/health` checks database access.
 
 Persistent host mounts:
 
