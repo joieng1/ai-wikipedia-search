@@ -1,0 +1,30 @@
+services:
+  wikipedia:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      WIKI_DB_PATH: /app/data/my_wiki.db
+      MODEL_CACHE_DIR: /app/model-cache
+      OMP_NUM_THREADS: '2'
+    ports:
+      - '127.0.0.1:3010:3000'
+    volumes:
+      - /data/ai-wikipedia/database:/app/data:ro,z
+      - /data/ai-wikipedia/model-cache:/app/model-cache:z
+    mem_limit: 4g
+    cpus: 2.0
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

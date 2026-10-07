@@ -1,36 +1,24 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# AI Wikipedia Search
 
-## Getting Started
+Search paths between Wikipedia articles using a local SQLite link graph and embedding models.
 
-First, run the development server:
+## Development
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Use Node.js 22, run `npm ci`, then `npm run dev`. Set `WIKI_DB_PATH` to your local Wikipedia database. The database and environment files are excluded from Git and Docker build contexts.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Run `npm test` for the database worker regression tests and `npm run build` for production compilation and TypeScript validation.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Oracle deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+The self-hosted Coolify application builds `Dockerfile` using `/compose.oracle.yaml` from the GitHub `main` branch. Each image build runs the worker tests and production build before creating the runtime image. GitHub Actions runs the same checks for pull requests and pushes.
 
-## Learn More
+The container runs as the non-root `node` user and listens only on host `127.0.0.1:3010`. Cloudflare Tunnel publishes it at https://ai-wikipedia-search.johnieng.com. `/api/health` checks database access.
 
-To learn more about Next.js, take a look at the following resources:
+Persistent host mounts:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `/data/ai-wikipedia/database` is mounted read-only at `/app/data`; it contains the separately transferred and verified 14 GB `my_wiki.db` in DELETE journal mode.
+- `/data/ai-wikipedia/model-cache` is writable at `/app/model-cache`; models are retained across code deployments.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+Code deployments do not upload or replace either directory. Do not commit the database, archives, credentials, or model cache. Database updates require separate transfer, verification, and atomic publication.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+After the GitHub connection is activated, pushing to `main` triggers Coolify through the signed GitHub App webhook. Coolify builds and deploys the new image automatically. Runtime limits are 2 CPUs and 4 GiB RAM, with rotating container logs.

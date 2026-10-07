@@ -1,4 +1,4 @@
-import { parentPort } from 'worker_threads';
+import { parentPort } from 'node:worker_threads';
 import * as path from 'path';
 const Database = require('better-sqlite3');
 
@@ -11,14 +11,14 @@ interface Link {
   anchor: string;
 }
 
-const dbPath = path.resolve(process.cwd(), "my_wiki.db");
+const dbPath = path.resolve(process.env.WIKI_DB_PATH || path.join(process.cwd(), "my_wiki.db"));
 const db = new Database(dbPath, { fileMustExist: true, readonly: true });
 
 // apply PRAGMA settings
 db.exec(`
-  PRAGMA journal_mode = WAL;
-  PRAGMA synchronous = OFF;
-  PRAGMA cache_size = 1000000;
+  PRAGMA query_only = ON;
+
+  PRAGMA cache_size = -65536;
   PRAGMA temp_store = MEMORY;
   PRAGMA locking_mode = NORMAL;
   PRAGMA mmap_size = 536870912;

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pipeline } from "@xenova/transformers";
+import { pipeline, env } from "@xenova/transformers";
+
+if (process.env.MODEL_CACHE_DIR) env.cacheDir = process.env.MODEL_CACHE_DIR;
 import { PriorityQueue } from "@/lib/PriorityQueue";
 import { getLinks, Link } from "@/lib/db";
 
@@ -30,8 +32,15 @@ enum Model {
 const maxDuration = 60;
 const linkCache = new Map();
 
+const extractorCache = new Map<Model, ReturnType<typeof pipeline>>();
 async function createExtractor(model: Model) {
-  return await pipeline("feature-extraction", model);
+  let pending = extractorCache.get(model);
+  if (!pending) {
+    pending = pipeline("feature-extraction", model);
+    extractorCache.set(model, pending);
+    pending.catch(() => extractorCache.delete(model));
+  }
+  return await pending;
 }
 
 // cachces all embeddings and returns the cachced result
@@ -358,8 +367,13 @@ async function* biDirectionalPathFinder(
 
 // GET endpoint to run bidirectional path finder and streams response back
 export async function GET(req: NextRequest) {
-  // Extract client IP from headers
-  const clientIP = req.headers.get("x-forwarded-for") || req.ip || "local";
+  // Extract client IP from headers (NextRequest doesn't expose `ip`).
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const clientIP =
+    req.headers.get("cf-connecting-ip") ||
+    forwardedFor?.split(",").at(-1)?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "local";
   const now = Date.now();
   // Get and update timestamps for this IP
   const timestamps = rateLimitMap.get(clientIP) || [];
