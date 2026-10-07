@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local deployment data and secrets
+.env*
+*.db
+*.db-*
+*.zip
+*.key

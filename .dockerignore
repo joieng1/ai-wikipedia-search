@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env*
+my_wiki.db*
+*.db
+*.db-*
+*.zip
+database-transfer.json
+.DS_Store
+npm-debug.log*

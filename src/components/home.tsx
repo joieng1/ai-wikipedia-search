@@ -38,7 +38,7 @@ function SearchComponent() {
 
     try {
       const response = await fetch(
-        `/api/wikipedia?startWord=${start}&endWord=${end}&model=${model}`,
+        `/api/wikipedia?${new URLSearchParams({ startWord: start, endWord: end, model })}`,
         {
           method: "GET",
           headers: {
@@ -60,18 +60,18 @@ function SearchComponent() {
       if (!reader) throw new Error("No response body from server");
 
       let done = false;
+      let pendingText = "";
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
 
         if (value) {
-          const chunk = decoder.decode(value);
-
-          // remove newlines and leading/trailing whitespaces
-          const updates = chunk
-            .split("\n")
-            .filter((line) => line.trim().length > 0);
+          // Network chunks can split a JSON record or a UTF-8 character.
+          pendingText += decoder.decode(value, { stream: true });
+          const lines = pendingText.split("\n");
+          pendingText = lines.pop() || "";
+          const updates = lines.filter((line) => line.trim().length > 0);
 
           // process each update received from the server
           updates.forEach((update) => {
