@@ -41,3 +41,6 @@ next-env.d.ts
 *.db-*
 *.zip
 *.key
+
+# Compiled search workers
+/dist/

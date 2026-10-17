@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "src/lib",
+    "outDir": "dist/workers",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/lib/search-*.ts", "src/lib/search-*.mts", "src/lib/search.worker.mts", "src/lib/PriorityQueue.ts"]
+}

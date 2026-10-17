@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run build:workers && next dev",
+    "build": "npm run build:workers && next build",
     "start": "next start",
     "lint": "next lint",
     "docker:build": "docker build -t ghcr.io/joieng1/ai-wikipedia-search:latest .",
     "docker:push": "docker push ghcr.io/joieng1/ai-wikipedia-search:latest",
-    "test": "node --test tests/*.test.cjs"
+    "test": "npm run build:workers && node --test tests/*.test.cjs tests/*.test.mjs",
+    "build:workers": "tsc -p tsconfig.workers.json"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",

@@ -15,6 +15,7 @@ COPY --from=builder --chown=node:node /app/package*.json ./
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/src/lib/db.worker.js ./src/lib/db.worker.js
 COPY --from=builder --chown=node:node /app/next.config.mjs ./next.config.mjs
 USER node

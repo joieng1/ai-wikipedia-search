@@ -1,24 +1,24 @@
 "use client";
-import React, { useState, CSSProperties, useEffect } from "react";
+import React, { useState, CSSProperties, useEffect, useRef } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
-
-interface Step {
-  href: string;
-  text: string;
-  origin: string;
-}
+import { readSearchUpdates } from "@/lib/search-stream";
+import type { SearchStep, SearchUpdate } from "@/lib/search-types";
 
 function SearchComponent() {
   const [start, setStart] = useState("Video Games");
   const [end, setEnd] = useState("Chemical engineer");
   const [model, setModel] = useState("0");
-  const [pathForward, setPathForward] = useState<Step[]>([]);
-  const [pathBackward, setPathBackward] = useState<Step[]>([]);
+  const [pathForward, setPathForward] = useState<SearchStep[]>([]);
+  const [pathBackward, setPathBackward] = useState<SearchStep[]>([]);
   const [forwardTime, setForwardTime] = useState<number>(0);
   const [backwardTime, setBackwardTime] = useState<number>(0);
   const [forwardFinished, setForwardFinished] = useState<boolean>(false);
   const [backFinished, setBackFinished] = useState<boolean>(false);
-  let [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const activeSearch = useRef<AbortController | null>(null);
+
+  useEffect(() => () => activeSearch.current?.abort(), []);
 
   const override: CSSProperties = {
     display: "block",
@@ -26,9 +26,30 @@ function SearchComponent() {
     borderColor: "white",
   };
 
+  function applySearchUpdate(update: SearchUpdate) {
+    if (update.error) {
+      if (!update.direction) throw new Error(update.error);
+      setSearchError(`${update.direction}: ${update.error}`);
+      return;
+    }
+    if (update.direction === "forward") {
+      setForwardTime(update.time ?? 0);
+      if (update.path) setPathForward(update.path);
+      if (update.finished) setForwardFinished(true);
+    } else if (update.direction === "backward") {
+      setBackwardTime(update.time ?? 0);
+      if (update.path) setPathBackward(update.path);
+      if (update.finished) setBackFinished(true);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading) return;
+    const controller = new AbortController();
+    activeSearch.current = controller;
     setLoading(true);
+    setSearchError("");
     setPathForward([]);
     setPathBackward([]);
     setForwardTime(0);
@@ -37,84 +58,22 @@ function SearchComponent() {
     setForwardFinished(false);
 
     try {
-      const response = await fetch(
-        `/api/wikipedia?${new URLSearchParams({ startWord: start, endWord: end, model })}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      // Check for rate limiting
-      if (response.status === 429) {
+      const parameters = new URLSearchParams({ startWord: start, endWord: end, model });
+      const response = await fetch(`/api/wikipedia?${parameters}`, { signal: controller.signal });
+      if (!response.ok) {
         const errorData = await response.json();
-        alert(errorData.error || "Too many requests made, please wait.");
-        setLoading(false);
-        return;
+        throw new Error(errorData.error || `Search failed (${response.status})`);
       }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder("utf-8");
-      if (!reader) throw new Error("No response body from server");
-
-      let done = false;
-      let pendingText = "";
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-
-        if (value) {
-          // Network chunks can split a JSON record or a UTF-8 character.
-          pendingText += decoder.decode(value, { stream: true });
-          const lines = pendingText.split("\n");
-          pendingText = lines.pop() || "";
-          const updates = lines.filter((line) => line.trim().length > 0);
-
-          // process each update received from the server
-          updates.forEach((update) => {
-            try {
-              // parse twice to get json object
-              const parsed = JSON.parse(JSON.parse(update));
-
-              // if error, handle the error
-              if (parsed.error) {
-                console.error(parsed.error);
-                alert(parsed.error);
-                setLoading(false);
-                return;
-              }
-
-              // handle directional updates
-              if (parsed.direction === "forward") {
-                setForwardTime(parsed.time || 0);
-                if (parsed.finished) {
-                  setPathForward(parsed.path);
-                  setForwardFinished(true);
-                } else {
-                  setPathForward(parsed.path);
-                }
-              } else if (parsed.direction === "backward") {
-                setBackwardTime(parsed.time || 0);
-                if (parsed.finished) {
-                  setPathBackward(parsed.path);
-                  setBackFinished(true);
-                } else {
-                  setPathBackward(parsed.path);
-                }
-              }
-            } catch (error) {
-              console.error("Error parsing updates", error);
-            }
-          });
-        }
+      if (!response.body) throw new Error("No response body from server");
+      for await (const update of readSearchUpdates(response.body)) {
+        applySearchUpdate(update);
       }
-      setLoading(false);
     } catch (error) {
-      console.log(error);
-      alert("Error occured while fetching or processing the update.");
+      if (!controller.signal.aborted) {
+        setSearchError(error instanceof Error ? error.message : "Search failed");
+      }
+    } finally {
+      activeSearch.current = null;
       setLoading(false);
     }
   }
@@ -179,6 +138,7 @@ function SearchComponent() {
             </button>
           )}
         </form>
+        {searchError && <p role="alert" className="mt-4 text-red-400">{searchError}</p>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
